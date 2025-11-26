@@ -1,4 +1,5 @@
-import amqp from 'amqplib';
+import * as amqp from 'amqplib';
+import { Connection, Channel, ChannelModel } from 'amqplib';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateOrderRequest, OrderPayload, OrderItem } from './interfaces';
 
@@ -42,7 +43,27 @@ export async function CreateAndPublishOrder(requestedData: CreateOrderRequest): 
     };
 
     // Connect to RabbitMQ and publish the message
-    let connection: amqp.Connection | null = null;
-    let channel: amqp.Channel | null = null;
+    let connection: ChannelModel | null = null;
+    let channel: Channel | null = null;
 
+
+    try {
+        connection = await amqp.connect(RABBIT_URL);
+
+        channel = await connection.createChannel();
+        
+        await channel.assertExchange(EXCHANGE_NAME, 'topic', { durable: false });
+        
+        channel.publish(
+            EXCHANGE_NAME, 
+            ROUTING_KEY, 
+            Buffer.from(JSON.stringify(orderPayload))
+        );
+        
+    } finally { 
+        if (channel) await channel.close();
+        if (connection) await connection.close();
+    }
+
+    return orderPayload;
 }
