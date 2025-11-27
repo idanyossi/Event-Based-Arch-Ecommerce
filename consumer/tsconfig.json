@@ -1,45 +1,41 @@
 {
-  // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
-    // File Layout
-    // "rootDir": "./src",
-    // "outDir": "./dist",
-
-    // Environment Settings
-    // See also https://aka.ms/tsconfig/module
+    // --- File Layout (REQUIRED) ---
+    "outDir": "./dist",
+    "rootDir": "./src",
+    
+    // --- Environment Settings ---
+    "target": "ES2020",
     "module": "CommonJS",
-    "target": "esnext",
-    "types": [],
-    // For nodejs:
-    // "lib": ["esnext"],
-    // "types": ["node"],
-    // and npm install -D @types/node
+    "moduleResolution": "node",
+    "lib": ["es2020"],
+    
+    // CRITICAL FIX: Include Node types explicitly
+    "types": ["node"], 
+    
+    // --- Strictness Adjustments (The Fixes) ---
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    
+    // FIX 1 (Disabled to prevent type clashes with amqplib)
+    "strictFunctionTypes": false, 
+    "noUncheckedIndexedAccess": false, 
+    "exactOptionalPropertyTypes": false, 
 
-    // Other Outputs
+    // FIX 2 (Disabled because it conflicts with CommonJS and ts-node)
+    "isolatedModules": false, 
+    
+    // KEEP: Good build health options
+    "verbatimModuleSyntax": false,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
-
-    // Stricter Typechecking Options
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-
-    // Style Options
-    // "noImplicitReturns": true,
-    // "noImplicitOverride": true,
-    // "noUnusedLocals": true,
-    // "noUnusedParameters": true,
-    // "noFallthroughCasesInSwitch": true,
-    // "noPropertyAccessFromIndexSignature": true,
-
-    // Recommended Options
-    "strict": true,
-    "jsx": "react-jsx",
-    "verbatimModuleSyntax": false,
-    "isolatedModules": true,
-    "esModuleInterop": true,
-    "noUncheckedSideEffectImports": true,
-    "moduleDetection": "force",
-    "skipLibCheck": true,
-  }
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
 }

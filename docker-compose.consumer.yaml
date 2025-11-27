@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  consumer:
+    image: idanyossi/eventconsumer:latest
+    container_name: consumer-service
+    ports:
+      - "3001:3001"
+    environment:
+      - RABBIT_URL=amqp://rabbitmq
+    networks:
+      - ecommerce-net
+
+networks:
+  ecommerce-net:
+    external: true
+    name: ecommerce-shared-network

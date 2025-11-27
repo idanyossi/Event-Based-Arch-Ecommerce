@@ -11,9 +11,7 @@ services:
       - ecommerce-net
 
   producer:
-    build: 
-      context: ./producer
-      dockerfile: Dockerfile
+    image: idanyossi/eventproducer:latest
     container_name: producer-service
     ports:
       - "3000:3000"
