@@ -1,14 +1,19 @@
-import {Connection, Channel, ChannelModel, ConsumeMessage} from 'amqplib';
-import amqp from 'amqplib';
+import { Kafka, Consumer } from 'kafkajs';
 import { OrderPayload, ProcessedOrder } from './interfaces';
 
 
 export const orderDatabase: Map<string, ProcessedOrder> = new Map();
 
-// RabbitMQ configs
-export const RABBIT_URL = 'amqp://rabbitmq'; 
-export const EXCHANGE_NAME = 'ecommerce_exchange';
-export const ROUTING_KEY = 'order.new';
+export const topicTracker: Map<string, string[]> = new Map();
+
+// Kafka configs
+const kafka = new Kafka({
+    clientId: 'order-producer',
+    brokers: ['kafka:9092']
+});
+
+const consumer: Consumer = kafka.consumer({ groupId: 'order-consumer-group' });
+const TOPIC_NAME = 'orders';
 
 function processOrder(orderData: OrderPayload) {
     // 1. Calculate Shipping Costs (2% of totalAmount, requirement met)
@@ -26,37 +31,38 @@ function processOrder(orderData: OrderPayload) {
 }
 
 export async function startOrderConsumer() {
-    let connection: ChannelModel | null = null;
-    let channel: Channel | null = null;
+  try {
+        await consumer.connect();
+        await consumer.subscribe({ topic: TOPIC_NAME, fromBeginning: true });
 
-    try {
-        connection =  await amqp.connect(RABBIT_URL);
-        channel = await connection.createChannel();
+        console.log(`[Consumer] Subscribed to topic: ${TOPIC_NAME}`);
 
-        if (channel){
-            await channel.assertExchange(EXCHANGE_NAME, 'topic', { durable: false });
+        await consumer.run({
+            eachMessage: async ({ topic, partition, message }) => {
+                if (!message.value) return;
 
-            const q = await channel.assertQueue('', { exclusive: true });
-            
-            channel.bindQueue(q.queue, EXCHANGE_NAME, ROUTING_KEY); 
+                try {
+                    const orderData: OrderPayload = JSON.parse(message.value.toString());
+                    const orderId = orderData.orderId;
 
-            channel.consume(q.queue, (msg: ConsumeMessage | null) => {
-                if (msg) {
-                    try {
-                        const orderData: OrderPayload = JSON.parse(msg.content.toString());
-                 
-                        if (orderData.status === 'new') {
-                            processOrder(orderData);
-                        }
-                    } catch (e) {
-                        console.error("[Consumer Error] Failed to process message:", e);
+                    // 1. Requirement: Tracking Order IDs from Topic
+                    if (!topicTracker.has(topic)) {
+                        topicTracker.set(topic, []);
                     }
-                    
-                    channel!.ack(msg);
-                } 
-            }, { noAck: false });
-        }
+                    // Append ID to the list for this topic
+                    topicTracker.get(topic)?.push(orderId);
+
+                    // 2. Requirement: Same actions as Exercise 1
+                    processOrder(orderData);
+
+                } catch (e) {
+                    console.error(`[Consumer Error] Failed to parse message on topic ${topic}:`, e);
+                }
+            },
+        });
     } catch (error) {
-        console.error("Error processing message:", error);
+        console.error("[Consumer Error] Broker not available or connection failed:", error);
+        // Throwing here allows the index.ts to handle the error if needed
+        throw new Error('503: Message Broker Unavailable');
     }
 }

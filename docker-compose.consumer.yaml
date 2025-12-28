@@ -2,12 +2,14 @@ version: '3.8'
 
 services:
   consumer:
-    image: idanyossi/eventconsumer:latest
+    image: idanyossi/kafkaconsumer:1.0
     container_name: consumer-service
     ports:
       - "3001:3001"
     environment:
-      - RABBIT_URL=amqp://rabbitmq
+      # Updated from RABBIT_URL to KAFKA_BROKERS
+      # 'kafka' matches the service name of the broker in your producer compose file
+      - KAFKA_BROKERS=kafka:9092
     networks:
       - ecommerce-net
 

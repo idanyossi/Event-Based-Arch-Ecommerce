@@ -1,31 +1,37 @@
+# --- Builder Stage ---
 FROM node:18-alpine AS builder
 
-# Builder Stage: Installs dependencies and compiles code
 WORKDIR /app
+
+# 1. Copy package files
 COPY package*.json ./
-# Install ALL dependencies (production + development, needed for compilation)
+
+# 2. Install dependencies (Production + Dev)
 RUN npm install
 
-# Copy source code and compile
+# 3. GUARANTEE tsc is in the path by installing it globally
+RUN npm install -g typescript
+
+# 4. Copy source code
 COPY . .
-# Executes the "build": "tsc" script to create compiled JavaScript in the 'dist' folder
-RUN npm run build 
+
+# 5. Compile the TypeScript code
+RUN tsc
 
 # --- Final Stage: Runtime Image ---
 FROM node:18-alpine AS final
 
-# Set working directory for the final image
 WORKDIR /app
 
-# Only copy necessary production files from the builder stage:
-# 1. package.json (needed for npm install --only=production)
+# Only copy necessary files for execution
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/package-lock.json ./
 
-# 2. Re-install ONLY production dependencies (this significantly reduces image size)
+# Install only production dependencies (keeps image small)
 RUN npm install --only=production
 
-# 3. Copy the compiled JavaScript output
+# Copy the compiled JS from the builder stage
 COPY --from=builder /app/dist ./dist
 
-# Run the compiled application (the Consumer service)
+# Run the compiled application
 CMD ["node", "dist/index.js"]

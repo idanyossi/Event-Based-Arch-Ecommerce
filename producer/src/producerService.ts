@@ -1,13 +1,19 @@
-import * as amqp from 'amqplib';
-import { Connection, Channel, ChannelModel } from 'amqplib';
+import { Kafka, Producer } from 'kafkajs';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateOrderRequest, OrderPayload, OrderItem } from './interfaces';
+import { send } from 'process';
 
 
-// RabbitMQ configs
-const RABBIT_URL = 'amqp://rabbitmq'; 
-const EXCHANGE_NAME = 'ecommerce_exchange';
-const ROUTING_KEY = 'order.new';
+// Kafka configs
+const kafka = new Kafka({
+    clientId: 'order-producer',
+    brokers: ['kafka:9092']
+});
+
+const producer: Producer = kafka.producer();
+const TOPIC_NAME = 'orders';
+
+const ordersDb = new Map<string, OrderPayload>();
 
 // Generators for the randomized requests
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -15,6 +21,8 @@ const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (m
 // Helper to generate random price
 const getRandomPrice = () => parseFloat((Math.random() * 100).toFixed(2));
 
+
+// create order and publish to Kafka
 export async function CreateAndPublishOrder(requestedData: CreateOrderRequest): Promise<OrderPayload> {
     
     const items: OrderItem[] = [];
@@ -42,28 +50,36 @@ export async function CreateAndPublishOrder(requestedData: CreateOrderRequest): 
         status: 'new'
     };
 
-    // Connect to RabbitMQ and publish the message
-    let connection: ChannelModel | null = null;
-    let channel: Channel | null = null;
-
-
-    try {
-        connection = await amqp.connect(RABBIT_URL);
-
-        channel = await connection.createChannel();
-        
-        await channel.assertExchange(EXCHANGE_NAME, 'topic', { durable: false });
-        
-        channel.publish(
-            EXCHANGE_NAME, 
-            ROUTING_KEY, 
-            Buffer.from(JSON.stringify(orderPayload))
-        );
-        
-    } finally { 
-        if (channel) await channel.close();
-        if (connection) await connection.close();
-    }
-
+    ordersDb.set(orderPayload.orderId, orderPayload);
+    sendToKafka(orderPayload);
     return orderPayload;
+}
+
+export async function UpdateAndPublishOrder(orderId: string, newStatus: string): Promise<OrderPayload> {
+    const order = ordersDb.get(orderId);
+    if (!order) {
+        throw new Error(`Order with ID ${orderId} not found`);
+    }
+    order.status = newStatus as 'new' | 'pending' | 'confirmed';
+    ordersDb.set(orderId, order);
+    sendToKafka(order);
+    return order;
+}
+
+async function sendToKafka(order: OrderPayload) {
+    try{
+        await producer.connect();
+        await producer.send({
+            topic: TOPIC_NAME,
+            messages: [
+                { key: order.orderId, value: JSON.stringify(order) }
+            ]
+        });
+        console.log(`Order ${order.orderId} sent to Kafka topic ${TOPIC_NAME}`);
+    } catch (error) {
+        console.error("Error sending order to Kafka:", error);
+        throw new Error("Message broker is currently unavailable 503");
+    } finally {
+        await producer.disconnect();
+    }
 }
